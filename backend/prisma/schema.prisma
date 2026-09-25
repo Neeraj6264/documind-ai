@@ -1,0 +1,210 @@
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model User {
+  id           String               @id @default(uuid())
+  email        String               @unique
+  passwordHash String
+  name         String
+  avatarUrl    String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  memberships   OrganizationMember[]
+  ownedOrgs     Organization[]       @relation("OrgOwner")
+  conversations Conversation[]
+  refreshTokens RefreshToken[]
+  documents     Document[]
+
+  @@map("users")
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("STARTER")
+  ownerId   String
+  settings  Json?    @default("{\"topK\": 4, \"temperature\": 0.2, \"maxUploadSizeMb\": 25}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner         User                 @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members       OrganizationMember[]
+  documents     Document[]
+  chunks        DocumentChunk[]
+  conversations Conversation[]
+  auditLogs     AuditLog[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid())
+  organizationId String
+  userId         String
+  role           Role         @default(MEMBER)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("organization_members")
+}
+
+model Document {
+  id             String         @id @default(uuid())
+  organizationId String
+  uploadedById   String
+  title          String
+  fileName       String
+  fileType       String
+  fileSize       Int
+  filePath       String
+  status         DocumentStatus @default(PENDING)
+  errorMessage   String?
+  pageCount      Int?           @default(0)
+  chunkCount     Int            @default(0)
+  tokenCount     Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy     User           @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  chunks         DocumentChunk[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id             String                      @id @default(uuid())
+  organizationId String
+  documentId     String
+  chunkIndex     Int
+  content        String
+  tokenCount     Int                         @default(0)
+  pageNumber     Int?
+  embedding      Unsupported("vector(1536)")?
+  metadata       Json?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  organization   Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  document       Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  citations      MessageCitation[]
+
+  @@index([organizationId])
+  @@index([documentId])
+  @@map("document_chunks")
+}
+
+model Conversation {
+  id             String         @id @default(uuid())
+  organizationId String
+  userId         String
+  title          String         @default("New Conversation")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages       Message[]
+
+  @@index([organizationId])
+  @@index([organizationId, userId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String            @id @default(uuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  tokens         Int?              @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  citations      MessageCitation[]
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+model MessageCitation {
+  id         String        @id @default(uuid())
+  messageId  String
+  chunkId    String
+  similarity Float?
+  snippet    String
+  createdAt  DateTime      @default(now())
+
+  message    Message       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  chunk      DocumentChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([chunkId])
+  @@map("message_citations")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id             String       @id @default(uuid())
+  organizationId String
+  userId         String?
+  action         String
+  details        Json?
+  ipAddress      String?
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("audit_logs")
+}

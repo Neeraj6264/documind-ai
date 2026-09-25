@@ -1,0 +1,30 @@
+{
+  "name": "documind-ai",
+  "version": "1.0.0",
+  "description": "Production Multi-Tenant AI Document Chat SaaS Platform",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "test": "npm --prefix backend run test",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "prisma:migrate": "npm --prefix backend run prisma:migrate",
+    "prisma:push": "npm --prefix backend run prisma:push"
+  },
+  "keywords": [
+    "rag",
+    "saas",
+    "multi-tenant",
+    "pgvector",
+    "ai",
+    "openai",
+    "react",
+    "express",
+    "prisma"
+  ],
+  "author": "Neeraj Choithwani",
+  "license": "MIT"
+}
